@@ -9,6 +9,7 @@ It lets an MCP client run common ASA administration commands through a small, ty
 - MCP stdio server built with `@modelcontextprotocol/sdk`.
 - RCON command execution against one or more named Ark: Survival Ascended servers.
 - Per-tool `serverName` routing when multiple servers are configured.
+- Built-in base command catalog so agents can discover commands before running them.
 - Convenience tools for listing players, broadcasting messages, saving the world, and reading the game log.
 - Centralized configuration through `config.json`.
 - Unit-tested command helpers for input validation and output shaping.
@@ -154,6 +155,9 @@ For development, you can point the command at `tsx`:
 | Tool | Purpose |
 | --- | --- |
 | `asa_list_servers` | Lists configured ASA RCON servers without exposing passwords. |
+| `asa_list_commands` | Lists known ASA command catalog entries with descriptions and risk levels. |
+| `asa_describe_command` | Describes one catalog command, including arguments and examples. |
+| `asa_run_command` | Runs a catalog command by `commandId` and typed arguments. |
 | `asa_config_list_servers` | Lists servers from `config.json` without exposing passwords. |
 | `asa_config_upsert_server` | Creates or updates a server entry in `config.json`. |
 | `asa_config_remove_server` | Removes a server entry from `config.json`. |
@@ -165,6 +169,15 @@ For development, you can point the command at `tsx`:
 | `asa_get_game_log` | Runs `GetGameLog`. |
 
 Server-bound tools accept an optional `serverName` argument. It becomes required when multiple servers are configured and no default server is set.
+
+The first built-in command catalog includes:
+
+| Command ID | RCON | Danger | Purpose |
+| --- | --- | --- | --- |
+| `list_players` | `ListPlayers` | `safe` | List connected or known players. |
+| `get_game_log` | `GetGameLog` | `safe` | Read available game log lines. |
+| `broadcast` | `Broadcast {message}` | `safe` | Send a server-wide message. |
+| `save_world` | `SaveWorld` | `admin` | Request an immediate world save. |
 
 Config-writing tools never return passwords, but any password supplied through an MCP client is still visible to that client. For local setup, `ark-asa-mcp configure` is safer.
 
