@@ -2,7 +2,7 @@
 
 `ark-asa-mcp` is a Node.js Model Context Protocol server for Ark: Survival Ascended servers that expose RCON.
 
-It lets an MCP client run common ASA administration commands through a small, typed tool surface while keeping one or more RCON server definitions in environment variables.
+It lets an MCP client run common ASA administration commands through a small, typed tool surface while keeping one or more RCON server definitions in a local `config.json` file.
 
 ## Features
 
@@ -10,7 +10,7 @@ It lets an MCP client run common ASA administration commands through a small, ty
 - RCON command execution against one or more named Ark: Survival Ascended servers.
 - Per-tool `serverName` routing when multiple servers are configured.
 - Convenience tools for listing players, broadcasting messages, saving the world, and reading the game log.
-- Centralized configuration through environment variables.
+- Centralized configuration through `config.json`.
 - Unit-tested command helpers for input validation and output shaping.
 
 ## Requirements
@@ -28,15 +28,34 @@ npm run build
 
 ## Configuration
 
-Copy `.env.example` for local development, or set the same values in your MCP client configuration.
+Copy `config.example.json` to `config.json` and edit the server definitions for your ASA hosts. The local `config.json` file is ignored by Git because it contains RCON passwords.
 
-For multiple ASA servers, set `ARK_ASA_RCON_SERVERS` to a JSON array:
+```json
+{
+  "defaultServerName": "azer",
+  "timeoutMs": 10000,
+  "maxResponseChars": 20000,
+  "servers": [
+    {
+      "serverName": "azer",
+      "host": "127.0.0.1",
+      "port": 27020,
+      "password": "change-me"
+    },
+    {
+      "serverName": "island",
+      "host": "127.0.0.2",
+      "port": 27020,
+      "password": "change-me-too"
+    }
+  ]
+}
+```
+
+By default, `ark-asa-mcp` reads `config.json` from the process working directory. You can point to another file with `ARK_ASA_CONFIG_PATH`:
 
 ```bash
-ARK_ASA_RCON_SERVERS=[{"serverName":"azer","host":"127.0.0.1","port":27020,"password":"change-me"},{"serverName":"island","host":"127.0.0.2","port":27020,"password":"change-me-too"}]
-ARK_ASA_DEFAULT_SERVER=azer
-ARK_ASA_RCON_TIMEOUT_MS=10000
-ARK_ASA_RCON_MAX_RESPONSE_CHARS=20000
+ARK_ASA_CONFIG_PATH=D:/Repositories/ark-asa-mcp/config.json
 ```
 
 Each server object supports:
@@ -47,12 +66,12 @@ Each server object supports:
 | `host` | no | `127.0.0.1` | ASA RCON host. |
 | `port` | no | `27020` | ASA RCON port. |
 | `password` | yes | none | ASA RCON password. |
-| `timeoutMs` | no | `ARK_ASA_RCON_TIMEOUT_MS` or `10000` | Per-server timeout override. |
-| `maxResponseChars` | no | `ARK_ASA_RCON_MAX_RESPONSE_CHARS` or `20000` | Per-server response cap. |
+| `timeoutMs` | no | top-level `timeoutMs` or `10000` | Per-server timeout override. |
+| `maxResponseChars` | no | top-level `maxResponseChars` or `20000` | Per-server response cap. |
 
-`ARK_ASA_DEFAULT_SERVER` is optional. If it is not set and only one server is configured, tools can omit `serverName`. If more than one server is configured, tools should pass `serverName`.
+`defaultServerName` is optional. If it is not set and only one server is configured, tools can omit `serverName`. If more than one server is configured, tools should pass `serverName`.
 
-The legacy single-server variables still work:
+Environment fallback is still available for simple or containerized deployments:
 
 ```bash
 ARK_ASA_RCON_SERVER_NAME=azer
@@ -61,7 +80,7 @@ ARK_ASA_RCON_PORT=27020
 ARK_ASA_RCON_PASSWORD=change-me
 ```
 
-`ARK_RCON_*` aliases are also accepted.
+`ARK_ASA_RCON_SERVERS` and `ARK_RCON_*` aliases are still accepted as fallbacks when no config file exists.
 
 ## MCP Client Example
 
@@ -72,8 +91,7 @@ ARK_ASA_RCON_PASSWORD=change-me
       "command": "node",
       "args": ["D:/Repositories/ark-asa-mcp/dist/index.js"],
       "env": {
-        "ARK_ASA_RCON_SERVERS": "[{\"serverName\":\"azer\",\"host\":\"127.0.0.1\",\"port\":27020,\"password\":\"change-me\"},{\"serverName\":\"island\",\"host\":\"127.0.0.2\",\"port\":27020,\"password\":\"change-me-too\"}]",
-        "ARK_ASA_DEFAULT_SERVER": "azer"
+        "ARK_ASA_CONFIG_PATH": "D:/Repositories/ark-asa-mcp/config.json"
       }
     }
   }
@@ -89,7 +107,7 @@ For development, you can point the command at `tsx`:
       "command": "npx",
       "args": ["tsx", "D:/Repositories/ark-asa-mcp/src/index.ts"],
       "env": {
-        "ARK_ASA_RCON_SERVERS": "[{\"serverName\":\"azer\",\"host\":\"127.0.0.1\",\"port\":27020,\"password\":\"change-me\"}]"
+        "ARK_ASA_CONFIG_PATH": "D:/Repositories/ark-asa-mcp/config.json"
       }
     }
   }
