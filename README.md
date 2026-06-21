@@ -21,10 +21,16 @@ It lets an MCP client run common ASA administration commands through a small, ty
 
 ## Install
 
+Developer mode:
+
 ```bash
 npm install
 npm run build
 ```
+
+User mode:
+
+Download `ark-asa-mcp-win-x64.zip` from a GitHub release, extract it, copy `config.example.json` to `config.json`, and point your MCP client at `ark-asa-mcp.exe`.
 
 ## Configuration
 
@@ -84,6 +90,35 @@ ARK_ASA_RCON_PASSWORD=change-me
 
 ## MCP Client Example
 
+Release `.exe` mode:
+
+```json
+{
+  "mcpServers": {
+    "ark-asa": {
+      "command": "C:/Tools/ark-asa-mcp/ark-asa-mcp.exe"
+    }
+  }
+}
+```
+
+If the config file lives elsewhere:
+
+```json
+{
+  "mcpServers": {
+    "ark-asa": {
+      "command": "C:/Tools/ark-asa-mcp/ark-asa-mcp.exe",
+      "env": {
+        "ARK_ASA_CONFIG_PATH": "C:/Tools/ark-asa-mcp/config.json"
+      }
+    }
+  }
+}
+```
+
+Node mode:
+
 ```json
 {
   "mcpServers": {
@@ -119,6 +154,10 @@ For development, you can point the command at `tsx`:
 | Tool | Purpose |
 | --- | --- |
 | `asa_list_servers` | Lists configured ASA RCON servers without exposing passwords. |
+| `asa_config_list_servers` | Lists servers from `config.json` without exposing passwords. |
+| `asa_config_upsert_server` | Creates or updates a server entry in `config.json`. |
+| `asa_config_remove_server` | Removes a server entry from `config.json`. |
+| `asa_config_set_default_server` | Sets the default server in `config.json`. |
 | `asa_rcon_command` | Runs a raw RCON command. |
 | `asa_list_players` | Runs `ListPlayers` and returns raw plus parsed player entries. |
 | `asa_broadcast` | Runs `Broadcast <message>`. |
@@ -126,6 +165,32 @@ For development, you can point the command at `tsx`:
 | `asa_get_game_log` | Runs `GetGameLog`. |
 
 Server-bound tools accept an optional `serverName` argument. It becomes required when multiple servers are configured and no default server is set.
+
+Config-writing tools never return passwords, but any password supplied through an MCP client is still visible to that client. For local setup, `ark-asa-mcp configure` is safer.
+
+The MCP server can start before any server is configured so `asa_config_upsert_server` can create the first `config.json`. RCON tools will return a clear error until at least one server exists.
+
+## CLI Commands
+
+```bash
+ark-asa-mcp configure
+ark-asa-mcp configure --server-name azer --host 127.0.0.1 --port 27020 --password change-me --default
+ark-asa-mcp config:list
+ark-asa-mcp --version
+```
+
+`configure` creates or updates `config.json` interactively.
+
+## Releases
+
+The release workflow builds a Windows x64 zip containing:
+
+- `ark-asa-mcp.exe`
+- `config.example.json`
+- `README-USER.md`
+- `LICENSE`
+
+Push a tag like `v0.1.0` to create or update a draft GitHub release asset.
 
 ## Development
 
@@ -136,6 +201,14 @@ npm run build
 ```
 
 The package entry point is `src/index.ts`. Build output is written to `dist/`.
+
+Windows executable packaging uses Node.js single executable applications:
+
+```bash
+npm run package:win
+```
+
+This script expects Node.js 26 or newer.
 
 ## Security Notes
 

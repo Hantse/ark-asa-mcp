@@ -1,25 +1,17 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-
-import { loadConfig } from "./config.js";
-import { AsaRconClient } from "./rcon.js";
-import { registerArkAsaTools } from "./tools.js";
-
-const SERVER_NAME = "ark-asa-mcp";
-const SERVER_VERSION = "0.1.0";
+import { runCli } from "./cli.js";
+import { SERVER_NAME, startMcpServer } from "./server.js";
 
 async function main(): Promise<void> {
-  const config = loadConfig();
-  const server = new McpServer({
-    name: SERVER_NAME,
-    version: SERVER_VERSION,
-  });
+  const args = process.argv.slice(2);
 
-  registerArkAsaTools(server, new AsaRconClient(config));
+  if (args.length > 0) {
+    process.exitCode = await runCli(args);
+    return;
+  }
 
-  await server.connect(new StdioServerTransport());
+  await startMcpServer();
 }
 
 main().catch((error: unknown) => {
