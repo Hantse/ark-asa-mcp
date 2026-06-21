@@ -36,6 +36,7 @@ flowchart LR
 | --- | --- | --- |
 | Bootstrap | `src/index.ts` | Load config, create the MCP server, connect stdio transport. |
 | Configuration | `src/config.ts` | Read and validate named RCON server definitions. |
+| Config Store | `src/config-store.ts` | Create, update, and summarize `config.json` without returning passwords. |
 | Tools | `src/tools.ts` | Register MCP tools, including optional `serverName` inputs, and format tool results. |
 | Commands | `src/commands.ts` | Validate raw commands, build known ASA commands, parse known output. |
 | RCON | `src/rcon.ts` | Resolve the selected server, connect to ASA RCON, send one command, truncate oversized responses. |
@@ -67,7 +68,7 @@ Each `servers` entry supports `serverName`, `host`, `port`, `password`, `timeout
 }
 ```
 
-By default, the server reads `config.json` from the process working directory. `ARK_ASA_CONFIG_PATH` can point at an explicit config file.
+By default, the server checks for `config.json` beside the executable, then in the process working directory, then in the user config directory. `ARK_ASA_CONFIG_PATH` can point at an explicit config file.
 
 The legacy single-server variables still work when no config file exists: `ARK_ASA_RCON_SERVER_NAME`, `ARK_ASA_RCON_HOST`, `ARK_ASA_RCON_PORT`, and `ARK_ASA_RCON_PASSWORD`.
 
@@ -81,6 +82,23 @@ Server-bound tools accept an optional `serverName` argument. Resolution follows 
 2. Use `defaultServerName` from config when configured.
 3. Use the only configured server when exactly one exists.
 4. Return a tool error listing available server names.
+
+## User Distribution
+
+The project supports both developer and user distribution:
+
+- Developer mode uses Node.js, npm, and the TypeScript source tree.
+- User mode ships a Windows x64 zip containing `ark-asa-mcp.exe`, `config.example.json`, `README-USER.md`, and `LICENSE`.
+
+The executable is built with Node.js single executable applications in `.github/workflows/release.yml`. The workflow validates the project, runs `npm run package:win`, uploads a workflow artifact, and attaches the zip to a draft GitHub release when the workflow runs from a `v*` tag.
+
+## Config Mutation
+
+Users can edit `config.json` manually, run `ark-asa-mcp configure`, or call MCP config tools. Config mutation tools write the file and refresh the in-memory RCON client config immediately.
+
+Config-writing MCP tools never return passwords, but secrets provided through an MCP client are still visible to that client. The CLI wizard is safer for local setup.
+
+When no config exists, the MCP server starts with an empty in-memory server list so the config tools remain usable. RCON command tools return a clear "no servers configured" error until the first server is added.
 
 ## RCON Connection Model
 

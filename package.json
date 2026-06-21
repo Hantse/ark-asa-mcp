@@ -11,11 +11,13 @@
     "README.md",
     "AGENT.md",
     "docs",
+    "scripts",
     ".env.example",
     "config.example.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "package:win": "node scripts/package-win.mjs",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.3",
+    "esbuild": "^0.28.1",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9"

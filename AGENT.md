@@ -9,6 +9,10 @@ Expose a focused Model Context Protocol tool surface for ASA server operators. T
 ## Current Tool Surface
 
 - `asa_list_servers`: list configured RCON targets without exposing passwords.
+- `asa_config_list_servers`: list servers from `config.json` without exposing passwords.
+- `asa_config_upsert_server`: create or update a server in `config.json`.
+- `asa_config_remove_server`: remove a server from `config.json`.
+- `asa_config_set_default_server`: set the default server in `config.json`.
 - `asa_rcon_command`: execute one raw, single-line RCON command.
 - `asa_list_players`: execute `ListPlayers` and return raw output plus best-effort parsed players.
 - `asa_broadcast`: execute `Broadcast <message>`.
@@ -21,6 +25,8 @@ Expose a focused Model Context Protocol tool surface for ASA server operators. T
 - Commit `config.example.json`, but never commit a real `config.json`.
 - Support multiple named ASA servers through `config.json`.
 - Require explicit `serverName` routing whenever a deployment has multiple servers and no default.
+- Keep the `.exe` release path friendly for users who do not know Git or npm.
+- Prefer `ark-asa-mcp configure` for local password entry; config-writing MCP tools are useful but the MCP client can see supplied passwords.
 - Keep tool handlers small and move command formatting into testable helpers.
 - Prefer explicit, single-purpose ASA tools for common workflows.
 - Keep the raw command tool available for commands that do not yet have a dedicated wrapper.
@@ -38,6 +44,8 @@ The server has four layers:
 
 Configuration is loaded once at startup from `src/config.ts`. Multi-server config is read from `config.json` by default, or from `ARK_ASA_CONFIG_PATH` when a custom path is provided.
 
+`src/index.ts` routes CLI arguments. With no arguments, it starts the MCP stdio server. With `configure`, it launches the interactive config wizard.
+
 ## Development Checklist
 
 Before opening a PR, run:
@@ -49,3 +57,5 @@ npm run build
 ```
 
 When adding tools, add focused tests for command validation or parsing behavior. Avoid requiring a live ASA server in automated tests.
+
+For release packaging changes, also keep `.github/workflows/release.yml`, `scripts/package-win.mjs`, and `docs/README-USER.md` aligned.

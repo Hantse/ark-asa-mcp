@@ -17,7 +17,11 @@ export type RconServerSummary = {
 };
 
 export class AsaRconClient {
-  constructor(private readonly config: AppConfig) {}
+  constructor(private config: AppConfig) {}
+
+  updateConfig(config: AppConfig): void {
+    this.config = config;
+  }
 
   listServers(): RconServerSummary[] {
     return this.config.servers.map((server) => ({
@@ -81,6 +85,12 @@ export class AsaRconClient {
 
     if (this.config.servers.length === 1) {
       return this.config.servers[0];
+    }
+
+    if (this.config.servers.length === 0) {
+      throw new Error(
+        "No ASA RCON servers are configured. Run ark-asa-mcp configure or call asa_config_upsert_server first.",
+      );
     }
 
     throw new Error(`serverName is required. Available servers: ${this.availableServerNames()}.`);
