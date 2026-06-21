@@ -42,38 +42,43 @@ flowchart LR
 
 ## Configuration
 
-Configuration is loaded at startup. The preferred format is `ARK_ASA_RCON_SERVERS`, a JSON array of named RCON targets.
+Configuration is loaded at startup. The preferred format is a local `config.json` file with named RCON targets.
 
-| Variable | Default | Notes |
+| Field | Default | Notes |
 | --- | --- | --- |
-| `ARK_ASA_RCON_SERVERS` | none | JSON array of named RCON server definitions. |
-| `ARK_ASA_DEFAULT_SERVER` | none | Optional default `serverName` when tools omit it. |
-| `ARK_ASA_RCON_TIMEOUT_MS` | `10000` | Connection and command timeout. |
-| `ARK_ASA_RCON_MAX_RESPONSE_CHARS` | `20000` | Safety cap for tool responses. |
+| `defaultServerName` | none | Optional default `serverName` when tools omit it. |
+| `timeoutMs` | `10000` | Connection and command timeout. |
+| `maxResponseChars` | `20000` | Safety cap for tool responses. |
+| `servers` | none | Non-empty array of named RCON server definitions. |
 
-Each `ARK_ASA_RCON_SERVERS` entry supports `serverName`, `host`, `port`, `password`, `timeoutMs`, and `maxResponseChars`.
+Each `servers` entry supports `serverName`, `host`, `port`, `password`, `timeoutMs`, and `maxResponseChars`.
 
 ```json
-[
-  {
-    "serverName": "azer",
-    "host": "127.0.0.1",
-    "port": 27020,
-    "password": "change-me"
-  }
-]
+{
+  "defaultServerName": "azer",
+  "servers": [
+    {
+      "serverName": "azer",
+      "host": "127.0.0.1",
+      "port": 27020,
+      "password": "change-me"
+    }
+  ]
+}
 ```
 
-The legacy single-server variables still work: `ARK_ASA_RCON_SERVER_NAME`, `ARK_ASA_RCON_HOST`, `ARK_ASA_RCON_PORT`, and `ARK_ASA_RCON_PASSWORD`.
+By default, the server reads `config.json` from the process working directory. `ARK_ASA_CONFIG_PATH` can point at an explicit config file.
 
-The shorter `ARK_RCON_*` aliases are also accepted.
+The legacy single-server variables still work when no config file exists: `ARK_ASA_RCON_SERVER_NAME`, `ARK_ASA_RCON_HOST`, `ARK_ASA_RCON_PORT`, and `ARK_ASA_RCON_PASSWORD`.
+
+`ARK_ASA_RCON_SERVERS` and the shorter `ARK_RCON_*` aliases are also accepted as environment fallbacks.
 
 ## Server Selection
 
 Server-bound tools accept an optional `serverName` argument. Resolution follows this order:
 
 1. Use the provided `serverName`.
-2. Use `ARK_ASA_DEFAULT_SERVER` when configured.
+2. Use `defaultServerName` from config when configured.
 3. Use the only configured server when exactly one exists.
 4. Return a tool error listing available server names.
 

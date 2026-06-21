@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 export type AppConfig = {
   servers: RconServerConfig[];
   defaultServerName?: string;
@@ -12,6 +15,13 @@ export type RconServerConfig = {
   maxResponseChars: number;
 };
 
+export type LoadConfigOptions = {
+  configPath?: string;
+  cwd?: string;
+  fileExists?: (path: string) => boolean;
+  readFile?: (path: string) => string;
+};
+
 export class ConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -19,41 +29,152 @@ export class ConfigError extends Error {
   }
 }
 
+const DEFAULT_CONFIG_FILE = "config.json";
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 27020;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_RESPONSE_CHARS = 20_000;
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const defaultServerName = readFirstEnv(env, "ARK_ASA_DEFAULT_SERVER", "ARK_DEFAULT_SERVER");
-  const timeoutMs = readIntegerEnv(
+export function loadConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  options: LoadConfigOptions = {},
+): AppConfig {
+  const envDefaultServerName = readFirstEnv(env, "ARK_ASA_DEFAULT_SERVER", "ARK_DEFAULT_SERVER");
+  const envTimeoutMs = readIntegerEnv(
     env,
     DEFAULT_TIMEOUT_MS,
     "ARK_ASA_RCON_TIMEOUT_MS",
     "ARK_RCON_TIMEOUT_MS",
   );
-  const maxResponseChars = readIntegerEnv(
+  const envMaxResponseChars = readIntegerEnv(
     env,
     DEFAULT_MAX_RESPONSE_CHARS,
     "ARK_ASA_RCON_MAX_RESPONSE_CHARS",
     "ARK_RCON_MAX_RESPONSE_CHARS",
   );
+  const configFile = readConfigFile(env, options);
+
+  if (configFile) {
+    return loadConfigFromFile(
+      configFile.content,
+      configFile.path,
+      envDefaultServerName,
+      envTimeoutMs,
+      envMaxResponseChars,
+    );
+  }
+
+  return loadConfigFromEnvironment(env, envDefaultServerName, envTimeoutMs, envMaxResponseChars);
+}
+
+function readConfigFile(
+  env: NodeJS.ProcessEnv,
+  options: LoadConfigOptions,
+): { path: string; content: string } | undefined {
+  const fileExists = options.fileExists ?? existsSync;
+  const readFile = options.readFile ?? ((path: string) => readFileSync(path, "utf8"));
+  const configuredPath =
+    options.configPath ?? readFirstEnv(env, "ARK_ASA_CONFIG_PATH", "ARK_CONFIG_PATH");
+  const configPath = resolve(options.cwd ?? process.cwd(), configuredPath ?? DEFAULT_CONFIG_FILE);
+  const hasExplicitPath = configuredPath !== undefined;
+
+  if (!fileExists(configPath)) {
+    if (hasExplicitPath) {
+      throw new ConfigError(`Config file not found: ${configPath}`);
+    }
+
+    return undefined;
+  }
+
+  try {
+    return {
+      path: configPath,
+      content: readFile(configPath),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    throw new ConfigError(`Failed to read config file ${configPath}: ${message}`);
+  }
+}
+
+function loadConfigFromFile(
+  content: string,
+  configPath: string,
+  envDefaultServerName: string | undefined,
+  envTimeoutMs: number,
+  envMaxResponseChars: number,
+): AppConfig {
+  const parsed = parseJson(content, configPath);
+  const root = Array.isArray(parsed) ? undefined : assertRecord(parsed, configPath);
+  const serversInput = root ? root.servers : parsed;
+  const defaultServerName =
+    (root ? readStringField(root, "defaultServerName") ?? readStringField(root, "defaultServer") : undefined) ??
+    envDefaultServerName;
+  const timeoutMs = root
+    ? readPositiveIntegerField(root, "timeoutMs", envTimeoutMs, `${configPath}.timeoutMs`)
+    : envTimeoutMs;
+  const maxResponseChars = root
+    ? readPositiveIntegerField(
+        root,
+        "maxResponseChars",
+        envMaxResponseChars,
+        `${configPath}.maxResponseChars`,
+      )
+    : envMaxResponseChars;
+
+  if (!Array.isArray(serversInput) || serversInput.length === 0) {
+    throw new ConfigError(`${configPath}.servers must be a non-empty array.`);
+  }
+
+  const servers = parseServersArray(
+    serversInput,
+    `${configPath}.servers`,
+    timeoutMs,
+    maxResponseChars,
+  );
+
+  validateDefaultServer(defaultServerName, servers);
+
+  return {
+    servers,
+    defaultServerName,
+  };
+}
+
+function loadConfigFromEnvironment(
+  env: NodeJS.ProcessEnv,
+  envDefaultServerName: string | undefined,
+  envTimeoutMs: number,
+  envMaxResponseChars: number,
+): AppConfig {
   const serversJson = readFirstEnv(env, "ARK_ASA_RCON_SERVERS", "ARK_RCON_SERVERS");
 
   if (serversJson) {
-    const servers = parseServersJson(serversJson, timeoutMs, maxResponseChars);
+    const parsed = parseJson(serversJson, "ARK_ASA_RCON_SERVERS");
 
-    validateDefaultServer(defaultServerName, servers);
+    if (!Array.isArray(parsed)) {
+      throw new ConfigError("ARK_ASA_RCON_SERVERS must be a non-empty JSON array.");
+    }
+
+    const servers = parseServersArray(
+      parsed,
+      "ARK_ASA_RCON_SERVERS",
+      envTimeoutMs,
+      envMaxResponseChars,
+    );
+
+    validateDefaultServer(envDefaultServerName, servers);
 
     return {
       servers,
-      defaultServerName,
+      defaultServerName: envDefaultServerName,
     };
   }
 
   const serverName =
     readFirstEnv(env, "ARK_ASA_RCON_SERVER_NAME", "ARK_RCON_SERVER_NAME") ??
-    defaultServerName ??
+    envDefaultServerName ??
     "default";
   const host = readFirstEnv(env, "ARK_ASA_RCON_HOST", "ARK_RCON_HOST") ?? DEFAULT_HOST;
   const port = readIntegerEnv(env, DEFAULT_PORT, "ARK_ASA_RCON_PORT", "ARK_RCON_PORT");
@@ -61,7 +182,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   if (!password) {
     throw new ConfigError(
-      "Missing RCON configuration. Set ARK_ASA_RCON_SERVERS or ARK_ASA_RCON_PASSWORD before starting ark-asa-mcp.",
+      "Missing RCON configuration. Create config.json, set ARK_ASA_CONFIG_PATH, or set ARK_ASA_RCON_PASSWORD before starting ark-asa-mcp.",
     );
   }
 
@@ -72,35 +193,36 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         host,
         port,
         password,
-        timeoutMs,
-        maxResponseChars,
+        timeoutMs: envTimeoutMs,
+        maxResponseChars: envMaxResponseChars,
       },
     ],
     defaultServerName: serverName,
   };
 }
 
-function parseServersJson(
-  rawValue: string,
-  defaultTimeoutMs: number,
-  defaultMaxResponseChars: number,
-): RconServerConfig[] {
-  let parsed: unknown;
-
+function parseJson(content: string, label: string): unknown {
   try {
-    parsed = JSON.parse(rawValue);
+    return JSON.parse(content);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    throw new ConfigError(`ARK_ASA_RCON_SERVERS must be valid JSON: ${message}`);
+    throw new ConfigError(`${label} must be valid JSON: ${message}`);
+  }
+}
+
+function parseServersArray(
+  values: unknown[],
+  label: string,
+  defaultTimeoutMs: number,
+  defaultMaxResponseChars: number,
+): RconServerConfig[] {
+  if (values.length === 0) {
+    throw new ConfigError(`${label} must be a non-empty array.`);
   }
 
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new ConfigError("ARK_ASA_RCON_SERVERS must be a non-empty JSON array.");
-  }
-
-  const servers = parsed.map((server, index) =>
-    normalizeServerConfig(server, index, defaultTimeoutMs, defaultMaxResponseChars),
+  const servers = values.map((server, index) =>
+    normalizeServerConfig(server, index, label, defaultTimeoutMs, defaultMaxResponseChars),
   );
   const duplicateServerName = findDuplicateServerName(servers);
 
@@ -114,36 +236,39 @@ function parseServersJson(
 function normalizeServerConfig(
   value: unknown,
   index: number,
+  label: string,
   defaultTimeoutMs: number,
   defaultMaxResponseChars: number,
 ): RconServerConfig {
+  const itemLabel = `${label}[${index}]`;
+
   if (!isRecord(value)) {
-    throw new ConfigError(`ARK_ASA_RCON_SERVERS[${index}] must be an object.`);
+    throw new ConfigError(`${itemLabel} must be an object.`);
   }
 
   const serverName = readStringField(value, "serverName") ?? readStringField(value, "name");
   const host = readStringField(value, "host") ?? DEFAULT_HOST;
   const password = readStringField(value, "password");
-  const port = readPositiveIntegerField(value, "port", DEFAULT_PORT, `ARK_ASA_RCON_SERVERS[${index}].port`);
+  const port = readPositiveIntegerField(value, "port", DEFAULT_PORT, `${itemLabel}.port`);
   const timeoutMs = readPositiveIntegerField(
     value,
     "timeoutMs",
     defaultTimeoutMs,
-    `ARK_ASA_RCON_SERVERS[${index}].timeoutMs`,
+    `${itemLabel}.timeoutMs`,
   );
   const maxResponseChars = readPositiveIntegerField(
     value,
     "maxResponseChars",
     defaultMaxResponseChars,
-    `ARK_ASA_RCON_SERVERS[${index}].maxResponseChars`,
+    `${itemLabel}.maxResponseChars`,
   );
 
   if (!serverName) {
-    throw new ConfigError(`ARK_ASA_RCON_SERVERS[${index}].serverName is required.`);
+    throw new ConfigError(`${itemLabel}.serverName is required.`);
   }
 
   if (!password) {
-    throw new ConfigError(`ARK_ASA_RCON_SERVERS[${index}].password is required.`);
+    throw new ConfigError(`${itemLabel}.password is required.`);
   }
 
   return {
@@ -166,7 +291,7 @@ function validateDefaultServer(
 
   if (!servers.some((server) => server.serverName === defaultServerName)) {
     throw new ConfigError(
-      `ARK_ASA_DEFAULT_SERVER "${defaultServerName}" does not match any configured serverName.`,
+      `Default server "${defaultServerName}" does not match any configured serverName.`,
     );
   }
 }
@@ -183,6 +308,14 @@ function findDuplicateServerName(servers: RconServerConfig[]): string | undefine
   }
 
   return undefined;
+}
+
+function assertRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new ConfigError(`${label} must be a JSON object or an array of servers.`);
+  }
+
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

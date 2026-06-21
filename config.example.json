@@ -1,0 +1,19 @@
+{
+  "defaultServerName": "azer",
+  "timeoutMs": 10000,
+  "maxResponseChars": 20000,
+  "servers": [
+    {
+      "serverName": "azer",
+      "host": "127.0.0.1",
+      "port": 27020,
+      "password": "change-me"
+    },
+    {
+      "serverName": "island",
+      "host": "127.0.0.2",
+      "port": 27020,
+      "password": "change-me-too"
+    }
+  ]
+}

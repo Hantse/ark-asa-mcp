@@ -17,8 +17,9 @@ Expose a focused Model Context Protocol tool surface for ASA server operators. T
 
 ## Operating Principles
 
-- Keep RCON credentials in environment variables only.
-- Support multiple named ASA servers through `ARK_ASA_RCON_SERVERS`.
+- Keep real RCON credentials in local `config.json` files or environment variables only.
+- Commit `config.example.json`, but never commit a real `config.json`.
+- Support multiple named ASA servers through `config.json`.
 - Require explicit `serverName` routing whenever a deployment has multiple servers and no default.
 - Keep tool handlers small and move command formatting into testable helpers.
 - Prefer explicit, single-purpose ASA tools for common workflows.
@@ -35,7 +36,7 @@ The server has four layers:
 3. ASA command helpers in `src/commands.ts`.
 4. RCON target resolution and command execution in `src/rcon.ts`.
 
-Configuration is loaded once at startup from `src/config.ts`. Multi-server config uses a JSON array where each object contains `serverName`, `host`, `port`, and `password`.
+Configuration is loaded once at startup from `src/config.ts`. Multi-server config is read from `config.json` by default, or from `ARK_ASA_CONFIG_PATH` when a custom path is provided.
 
 ## Development Checklist
 
