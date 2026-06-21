@@ -9,6 +9,9 @@ Expose a focused Model Context Protocol tool surface for ASA server operators. T
 ## Current Tool Surface
 
 - `asa_list_servers`: list configured RCON targets without exposing passwords.
+- `asa_list_commands`: list the built-in command catalog.
+- `asa_describe_command`: describe one catalog command.
+- `asa_run_command`: execute a command catalog entry by `commandId` and typed arguments.
 - `asa_config_list_servers`: list servers from `config.json` without exposing passwords.
 - `asa_config_upsert_server`: create or update a server in `config.json`.
 - `asa_config_remove_server`: remove a server from `config.json`.
@@ -24,6 +27,8 @@ Expose a focused Model Context Protocol tool surface for ASA server operators. T
 - Keep real RCON credentials in local `config.json` files or environment variables only.
 - Commit `config.example.json`, but never commit a real `config.json`.
 - Support multiple named ASA servers through `config.json`.
+- Prefer catalog commands over raw RCON when a matching `commandId` exists.
+- Keep catalog entries descriptive enough that an agent can understand purpose, arguments, and risk.
 - Require explicit `serverName` routing whenever a deployment has multiple servers and no default.
 - Keep the `.exe` release path friendly for users who do not know Git or npm.
 - Prefer `ark-asa-mcp configure` for local password entry; config-writing MCP tools are useful but the MCP client can see supplied passwords.

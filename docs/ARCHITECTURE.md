@@ -37,6 +37,7 @@ flowchart LR
 | Bootstrap | `src/index.ts` | Load config, create the MCP server, connect stdio transport. |
 | Configuration | `src/config.ts` | Read and validate named RCON server definitions. |
 | Config Store | `src/config-store.ts` | Create, update, and summarize `config.json` without returning passwords. |
+| Command Catalog | `src/catalog.ts` | Describe known commands, validate arguments, and build RCON strings. |
 | Tools | `src/tools.ts` | Register MCP tools, including optional `serverName` inputs, and format tool results. |
 | Commands | `src/commands.ts` | Validate raw commands, build known ASA commands, parse known output. |
 | RCON | `src/rcon.ts` | Resolve the selected server, connect to ASA RCON, send one command, truncate oversized responses. |
@@ -82,6 +83,19 @@ Server-bound tools accept an optional `serverName` argument. Resolution follows 
 2. Use `defaultServerName` from config when configured.
 3. Use the only configured server when exactly one exists.
 4. Return a tool error listing available server names.
+
+## Command Catalog
+
+The command catalog gives agents context before execution. Instead of guessing raw RCON text, an agent can call `asa_list_commands`, inspect `description`, `args`, and `danger`, then execute with `asa_run_command`.
+
+The initial built-in catalog contains conservative base entries only:
+
+- `list_players`
+- `get_game_log`
+- `broadcast`
+- `save_world`
+
+Catalog entries include `category`, `danger`, `rconTemplate`, argument definitions, examples, and notes. Future plugin/custom catalogs can follow the same shape without changing the MCP tool contract.
 
 ## User Distribution
 

@@ -1,6 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import {
+  type CommandCatalogEntry,
+  buildCatalogCommand,
+  getCommandCatalogEntry,
+  listCommandCatalog,
+} from "./catalog.js";
 import { buildBroadcastCommand, parseListPlayersResponse } from "./commands.js";
 import { type ConfigStore, summarizeServers } from "./config-store.js";
 import type { AsaRconClient, RconExecutionResult } from "./rcon.js";
@@ -26,6 +32,75 @@ export function registerArkAsaTools(
       inputSchema: {},
     },
     async () => textResult({ servers: rcon.listServers() }),
+  );
+
+  server.registerTool(
+    "asa_list_commands",
+    {
+      title: "List ASA Command Catalog",
+      description: "List known base ASA RCON commands with descriptions and risk levels.",
+      inputSchema: {
+        category: z
+          .enum(["base", "plugin", "custom"])
+          .optional()
+          .describe("Optional command category filter. Currently only base commands are built in."),
+      },
+    },
+    async ({ category }) =>
+      runTool(async () => ({
+        commands: listCommandCatalog().filter((command) => !category || command.category === category),
+      })),
+  );
+
+  server.registerTool(
+    "asa_describe_command",
+    {
+      title: "Describe ASA Catalog Command",
+      description: "Describe a known ASA RCON command, including arguments and risk level.",
+      inputSchema: {
+        commandId: z.string().min(1).describe("Catalog command id, such as list_players."),
+      },
+    },
+    async ({ commandId }) =>
+      runTool(async () => {
+        const command = getCommandCatalogEntry(commandId);
+
+        return {
+          ...command,
+          rconTemplate: command.rconTemplate,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "asa_run_command",
+    {
+      title: "Run ASA Catalog Command",
+      description: "Run a known ASA RCON command by catalog id and typed arguments.",
+      inputSchema: {
+        serverName: serverNameSchema,
+        commandId: z.string().min(1).describe("Catalog command id, such as broadcast."),
+        args: z.record(z.unknown()).optional().describe("Arguments required by the catalog command."),
+      },
+    },
+    async ({ serverName, commandId, args }) =>
+      runTool(async () => {
+        const built = buildCatalogCommand(commandId, args);
+        const result = await rcon.execute(serverName, built.rconCommand);
+
+        if (built.command.id === "list_players") {
+          return {
+            ...result,
+            catalogCommand: commandSummaryForResult(built.command),
+            players: parseListPlayersResponse(result.response),
+          };
+        }
+
+        return {
+          ...result,
+          catalogCommand: commandSummaryForResult(built.command),
+        };
+      }),
   );
 
   server.registerTool(
@@ -220,5 +295,14 @@ function textResult(payload: RconExecutionResult | ToolPayload) {
         text: JSON.stringify(payload, null, 2),
       },
     ],
+  };
+}
+
+function commandSummaryForResult(command: CommandCatalogEntry) {
+  return {
+    id: command.id,
+    label: command.label,
+    category: command.category,
+    danger: command.danger,
   };
 }
