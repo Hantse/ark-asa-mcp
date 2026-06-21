@@ -6,17 +6,34 @@ import type { AsaRconClient, RconExecutionResult } from "./rcon.js";
 
 type ToolPayload = Record<string, unknown>;
 
+const serverNameSchema = z
+  .string()
+  .min(1)
+  .optional()
+  .describe("Configured ASA serverName. Required when more than one server is configured.");
+
 export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): void {
+  server.registerTool(
+    "asa_list_servers",
+    {
+      title: "List ASA RCON Servers",
+      description: "List configured Ark: Survival Ascended RCON servers without exposing passwords.",
+      inputSchema: {},
+    },
+    async () => textResult({ servers: rcon.listServers() }),
+  );
+
   server.registerTool(
     "asa_rcon_command",
     {
       title: "Run ASA RCON Command",
       description: "Run one raw Ark: Survival Ascended RCON command.",
       inputSchema: {
+        serverName: serverNameSchema,
         command: z.string().min(1).describe("Single-line RCON command to execute."),
       },
     },
-    async ({ command }) => runTool(() => rcon.execute(command)),
+    async ({ command, serverName }) => runTool(() => rcon.execute(serverName, command)),
   );
 
   server.registerTool(
@@ -24,11 +41,13 @@ export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): voi
     {
       title: "List ASA Players",
       description: "Run ListPlayers and return raw output plus parsed player entries.",
-      inputSchema: {},
+      inputSchema: {
+        serverName: serverNameSchema,
+      },
     },
-    async () =>
+    async ({ serverName }) =>
       runTool(async () => {
-        const result = await rcon.execute("ListPlayers");
+        const result = await rcon.execute(serverName, "ListPlayers");
 
         return {
           ...result,
@@ -43,10 +62,12 @@ export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): voi
       title: "Broadcast ASA Message",
       description: "Broadcast a message to connected Ark: Survival Ascended players.",
       inputSchema: {
+        serverName: serverNameSchema,
         message: z.string().min(1).max(512).describe("Message to broadcast to the ASA server."),
       },
     },
-    async ({ message }) => runTool(() => rcon.execute(buildBroadcastCommand(message))),
+    async ({ message, serverName }) =>
+      runTool(() => rcon.execute(serverName, buildBroadcastCommand(message))),
   );
 
   server.registerTool(
@@ -54,9 +75,11 @@ export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): voi
     {
       title: "Save ASA World",
       description: "Run SaveWorld on the Ark: Survival Ascended server.",
-      inputSchema: {},
+      inputSchema: {
+        serverName: serverNameSchema,
+      },
     },
-    async () => runTool(() => rcon.execute("SaveWorld")),
+    async ({ serverName }) => runTool(() => rcon.execute(serverName, "SaveWorld")),
   );
 
   server.registerTool(
@@ -64,9 +87,11 @@ export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): voi
     {
       title: "Get ASA Game Log",
       description: "Run GetGameLog on the Ark: Survival Ascended server.",
-      inputSchema: {},
+      inputSchema: {
+        serverName: serverNameSchema,
+      },
     },
-    async () => runTool(() => rcon.execute("GetGameLog")),
+    async ({ serverName }) => runTool(() => rcon.execute(serverName, "GetGameLog")),
   );
 }
 
