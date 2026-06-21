@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 export type AppConfig = {
   servers: RconServerConfig[];
@@ -18,8 +18,16 @@ export type RconServerConfig = {
 export type LoadConfigOptions = {
   configPath?: string;
   cwd?: string;
+  applicationDir?: string;
+  userConfigDir?: string;
   fileExists?: (path: string) => boolean;
   readFile?: (path: string) => string;
+};
+
+export type ConfigPathInfo = {
+  path: string;
+  explicit: boolean;
+  exists: boolean;
 };
 
 export class ConfigError extends Error {
@@ -29,7 +37,7 @@ export class ConfigError extends Error {
   }
 }
 
-const DEFAULT_CONFIG_FILE = "config.json";
+export const DEFAULT_CONFIG_FILE = "config.json";
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 27020;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -71,16 +79,16 @@ function readConfigFile(
   env: NodeJS.ProcessEnv,
   options: LoadConfigOptions,
 ): { path: string; content: string } | undefined {
-  const fileExists = options.fileExists ?? existsSync;
+  const configPath = findConfigPath(env, options);
   const readFile = options.readFile ?? ((path: string) => readFileSync(path, "utf8"));
-  const configuredPath =
-    options.configPath ?? readFirstEnv(env, "ARK_ASA_CONFIG_PATH", "ARK_CONFIG_PATH");
-  const configPath = resolve(options.cwd ?? process.cwd(), configuredPath ?? DEFAULT_CONFIG_FILE);
-  const hasExplicitPath = configuredPath !== undefined;
 
-  if (!fileExists(configPath)) {
-    if (hasExplicitPath) {
-      throw new ConfigError(`Config file not found: ${configPath}`);
+  if (!configPath) {
+    return undefined;
+  }
+
+  if (!configPath.exists) {
+    if (configPath.explicit) {
+      throw new ConfigError(`Config file not found: ${configPath.path}`);
     }
 
     return undefined;
@@ -88,14 +96,107 @@ function readConfigFile(
 
   try {
     return {
-      path: configPath,
-      content: readFile(configPath),
+      path: configPath.path,
+      content: readFile(configPath.path),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    throw new ConfigError(`Failed to read config file ${configPath}: ${message}`);
+    throw new ConfigError(`Failed to read config file ${configPath.path}: ${message}`);
   }
+}
+
+export function findConfigPath(
+  env: NodeJS.ProcessEnv = process.env,
+  options: LoadConfigOptions = {},
+): ConfigPathInfo | undefined {
+  const fileExists = options.fileExists ?? existsSync;
+  const explicitPath =
+    options.configPath ?? readFirstEnv(env, "ARK_ASA_CONFIG_PATH", "ARK_CONFIG_PATH");
+
+  if (explicitPath) {
+    const path = resolve(options.cwd ?? process.cwd(), explicitPath);
+
+    return {
+      path,
+      explicit: true,
+      exists: fileExists(path),
+    };
+  }
+
+  for (const path of getImplicitConfigCandidates(env, options)) {
+    if (fileExists(path)) {
+      return {
+        path,
+        explicit: false,
+        exists: true,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+export function resolveConfigWritePath(
+  env: NodeJS.ProcessEnv = process.env,
+  options: LoadConfigOptions = {},
+): string {
+  const existingConfig = findConfigPath(env, options);
+
+  if (existingConfig) {
+    return existingConfig.path;
+  }
+
+  const explicitPath =
+    options.configPath ?? readFirstEnv(env, "ARK_ASA_CONFIG_PATH", "ARK_CONFIG_PATH");
+
+  if (explicitPath) {
+    return resolve(options.cwd ?? process.cwd(), explicitPath);
+  }
+
+  const applicationDir = getApplicationDir(options);
+
+  if (!isNodeRuntimeExecutable(process.execPath)) {
+    return resolve(applicationDir, DEFAULT_CONFIG_FILE);
+  }
+
+  return resolve(options.cwd ?? process.cwd(), DEFAULT_CONFIG_FILE);
+}
+
+function getImplicitConfigCandidates(
+  env: NodeJS.ProcessEnv,
+  options: LoadConfigOptions,
+): string[] {
+  return uniquePaths([
+    resolve(getApplicationDir(options), DEFAULT_CONFIG_FILE),
+    resolve(options.cwd ?? process.cwd(), DEFAULT_CONFIG_FILE),
+    resolve(getUserConfigDir(env, options), DEFAULT_CONFIG_FILE),
+  ]);
+}
+
+function getApplicationDir(options: LoadConfigOptions): string {
+  return options.applicationDir ?? dirname(process.execPath);
+}
+
+function getUserConfigDir(env: NodeJS.ProcessEnv, options: LoadConfigOptions): string {
+  if (options.userConfigDir) {
+    return options.userConfigDir;
+  }
+
+  const baseDir =
+    env.APPDATA ??
+    env.XDG_CONFIG_HOME ??
+    (env.HOME ? resolve(env.HOME, ".config") : options.cwd ?? process.cwd());
+
+  return resolve(baseDir, "ark-asa-mcp");
+}
+
+function isNodeRuntimeExecutable(path: string): boolean {
+  return /^node(?:\.exe)?$/i.test(path.split(/[\\/]/).at(-1) ?? "");
+}
+
+function uniquePaths(paths: string[]): string[] {
+  return Array.from(new Set(paths));
 }
 
 function loadConfigFromFile(

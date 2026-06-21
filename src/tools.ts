@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { buildBroadcastCommand, parseListPlayersResponse } from "./commands.js";
+import { type ConfigStore, summarizeServers } from "./config-store.js";
 import type { AsaRconClient, RconExecutionResult } from "./rcon.js";
 
 type ToolPayload = Record<string, unknown>;
@@ -12,7 +13,11 @@ const serverNameSchema = z
   .optional()
   .describe("Configured ASA serverName. Required when more than one server is configured.");
 
-export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): void {
+export function registerArkAsaTools(
+  server: McpServer,
+  rcon: AsaRconClient,
+  configStore: ConfigStore,
+): void {
   server.registerTool(
     "asa_list_servers",
     {
@@ -21,6 +26,100 @@ export function registerArkAsaTools(server: McpServer, rcon: AsaRconClient): voi
       inputSchema: {},
     },
     async () => textResult({ servers: rcon.listServers() }),
+  );
+
+  server.registerTool(
+    "asa_config_list_servers",
+    {
+      title: "List ASA Config Servers",
+      description: "List servers from config.json without exposing passwords.",
+      inputSchema: {},
+    },
+    async () => runTool(async () => configStore.listServers()),
+  );
+
+  server.registerTool(
+    "asa_config_upsert_server",
+    {
+      title: "Add or Update ASA Config Server",
+      description: "Create or update a named ASA RCON server in config.json.",
+      inputSchema: {
+        serverName: z.string().min(1).describe("Stable name used by MCP tools, such as azer."),
+        host: z.string().min(1).optional().describe("ASA RCON host."),
+        port: z.number().int().positive().optional().describe("ASA RCON port."),
+        password: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("ASA RCON password. Required when adding a new server."),
+        timeoutMs: z.number().int().positive().optional().describe("Optional per-server timeout."),
+        maxResponseChars: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Optional per-server response cap."),
+        makeDefault: z.boolean().optional().describe("Set this server as the default."),
+      },
+    },
+    async (input) =>
+      runTool(async () => {
+        const result = configStore.upsertServer(input);
+
+        rcon.updateConfig(result.config);
+
+        return {
+          configPath: result.configPath,
+          defaultServerName: result.config.defaultServerName,
+          servers: summarizeServers(result.config.servers),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "asa_config_remove_server",
+    {
+      title: "Remove ASA Config Server",
+      description: "Remove a named ASA RCON server from config.json.",
+      inputSchema: {
+        serverName: z.string().min(1).describe("Configured ASA serverName to remove."),
+      },
+    },
+    async ({ serverName }) =>
+      runTool(async () => {
+        const result = configStore.removeServer(serverName);
+
+        rcon.updateConfig(result.config);
+
+        return {
+          configPath: result.configPath,
+          defaultServerName: result.config.defaultServerName,
+          servers: summarizeServers(result.config.servers),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "asa_config_set_default_server",
+    {
+      title: "Set Default ASA Config Server",
+      description: "Set the default ASA RCON serverName in config.json.",
+      inputSchema: {
+        serverName: z.string().min(1).describe("Configured ASA serverName to use by default."),
+      },
+    },
+    async ({ serverName }) =>
+      runTool(async () => {
+        const result = configStore.setDefaultServer(serverName);
+
+        rcon.updateConfig(result.config);
+
+        return {
+          configPath: result.configPath,
+          defaultServerName: result.config.defaultServerName,
+          servers: summarizeServers(result.config.servers),
+        };
+      }),
   );
 
   server.registerTool(
