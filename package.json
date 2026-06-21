@@ -1,0 +1,43 @@
+{
+  "name": "ark-asa-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for Ark: Survival Ascended RCON commands.",
+  "type": "module",
+  "bin": {
+    "ark-asa-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "AGENT.md",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "ark",
+    "asa",
+    "mcp",
+    "rcon",
+    "model-context-protocol"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "rcon-client": "^4.2.5",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
